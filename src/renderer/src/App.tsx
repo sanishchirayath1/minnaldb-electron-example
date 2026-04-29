@@ -1,6 +1,109 @@
-import { useState } from 'react'
-import { useMutation, useQuery } from 'minnaldb-react'
+import { useState, useRef } from 'react'
+import { useQuerySignal, useMutationSignal, useSignalValue } from 'minnaldb-react/signals'
 import { db, projects, tasks } from './db.js'
+
+// ---------------------------------------------------------------------------
+// Render counter — shows how many times a component re-renders.
+// ---------------------------------------------------------------------------
+function useRenderCount() {
+  const count = useRef(0)
+  count.current++
+  return count.current
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard stat cards
+// ---------------------------------------------------------------------------
+
+function TotalTasksCard() {
+  const { data } = useQuerySignal(() => db.query.tasks)
+  const allTasks = useSignalValue(data)
+  const renders = useRenderCount()
+
+  return (
+    <div style={styles.card}>
+      <span style={styles.cardValue}>{allTasks?.length ?? 0}</span>
+      <span style={styles.cardLabel}>Total Tasks</span>
+      <span style={styles.renderBadge}>renders: {renders}</span>
+    </div>
+  )
+}
+
+function CompletedCard() {
+  const { data } = useQuerySignal(
+    () => db.query.tasks.where((t) => t.done.eq(1)),
+  )
+  const done = useSignalValue(data)
+  const renders = useRenderCount()
+
+  return (
+    <div style={styles.card}>
+      <span style={styles.cardValue}>{done?.length ?? 0}</span>
+      <span style={styles.cardLabel}>Completed</span>
+      <span style={styles.renderBadge}>renders: {renders}</span>
+    </div>
+  )
+}
+
+function ActiveCard() {
+  const { data } = useQuerySignal(
+    () => db.query.tasks.where((t) => t.done.eq(0)),
+  )
+  const active = useSignalValue(data)
+  const renders = useRenderCount()
+
+  return (
+    <div style={styles.card}>
+      <span style={styles.cardValue}>{active?.length ?? 0}</span>
+      <span style={styles.cardLabel}>Active</span>
+      <span style={styles.renderBadge}>renders: {renders}</span>
+    </div>
+  )
+}
+
+function ProjectCountCard() {
+  const { data } = useQuerySignal(() => db.query.projects)
+  const allProjects = useSignalValue(data)
+  const renders = useRenderCount()
+
+  return (
+    <div style={styles.card}>
+      <span style={styles.cardValue}>{allProjects?.length ?? 0}</span>
+      <span style={styles.cardLabel}>Projects</span>
+      <span style={styles.renderBadge}>renders: {renders}</span>
+    </div>
+  )
+}
+
+function Dashboard() {
+  const renders = useRenderCount()
+
+  return (
+    <section style={styles.dashboard}>
+      <div style={styles.dashboardHeader}>
+        <div>
+          <h3 style={styles.dashboardTitle}>Signals Dashboard</h3>
+          <p style={styles.dashboardSub}>
+            Each card subscribes to its own signal — only re-renders when its data changes.
+          </p>
+        </div>
+        <span style={{ ...styles.renderBadge, marginTop: 0 }}>
+          parent renders: {renders}
+        </span>
+      </div>
+      <div style={styles.grid}>
+        <TotalTasksCard />
+        <CompletedCard />
+        <ActiveCard />
+        <ProjectCountCard />
+      </div>
+    </section>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Main app — fully signal-based
+// ---------------------------------------------------------------------------
 
 export function App() {
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null)
@@ -10,11 +113,12 @@ export function App() {
   const [newColor, setNewColor] = useState('#6366f1')
   const [showProjectForm, setShowProjectForm] = useState(false)
 
-  const { data: allProjects } = useQuery(
+  const { data: projectsSignal } = useQuerySignal(
     () => db.query.projects.orderBy((p) => p.name),
   )
+  const allProjects = useSignalValue(projectsSignal)
 
-  const { data: allTasks, loading: tasksLoading } = useQuery(
+  const { data: tasksSignal, loading: tasksLoadingSignal } = useQuerySignal(
     () => {
       let q = db.query.tasks.orderBy((t) => t.createdAt, 'desc')
       if (selectedProjectId !== null) {
@@ -26,29 +130,33 @@ export function App() {
     },
     [selectedProjectId, filter],
   )
+  const allTasks = useSignalValue(tasksSignal)
+  const tasksLoading = useSignalValue(tasksLoadingSignal)
 
-  const addTask = useMutation(async (title: string) => {
+  const addTask = useMutationSignal(async (title: string) => {
     await db.insert(tasks).values({
       title,
       projectId: selectedProjectId,
     })
   })
 
-  const toggleTask = useMutation(async (id: number, currentDone: number) => {
+  const toggleTask = useMutationSignal(async (id: number, currentDone: number) => {
     await db.update(tasks).set({ done: currentDone ? 0 : 1 }).where((t) => t.id.eq(id))
   })
 
-  const removeTask = useMutation(async (id: number) => {
+  const removeTask = useMutationSignal(async (id: number) => {
     await db.delete(tasks).where((t) => t.id.eq(id))
   })
 
-  const addProject = useMutation(async (name: string, color: string) => {
+  const addProject = useMutationSignal(async (name: string, color: string) => {
     await db.insert(projects).values({ name, color })
   })
 
-  const removeProject = useMutation(async (id: number) => {
+  const removeProject = useMutationSignal(async (id: number) => {
     await db.delete(projects).where((p) => p.id.eq(id))
   })
+
+  const addTaskLoading = useSignalValue(addTask.loading)
 
   const onAddTask = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -206,6 +314,9 @@ export function App() {
           </div>
         )}
 
+        {/* Signals Dashboard */}
+        <Dashboard />
+
         {/* Add task form */}
         <form onSubmit={onAddTask} style={styles.addForm}>
           <input
@@ -218,7 +329,7 @@ export function App() {
             }
             style={styles.addInput}
           />
-          <button type="submit" disabled={addTask.loading} style={styles.addBtn}>
+          <button type="submit" disabled={addTaskLoading} style={styles.addBtn}>
             Add
           </button>
         </form>
@@ -278,6 +389,10 @@ export function App() {
     </div>
   )
 }
+
+// ---------------------------------------------------------------------------
+// Styles
+// ---------------------------------------------------------------------------
 
 const styles = {
   layout: {
@@ -471,6 +586,68 @@ const styles = {
     background: '#10b981',
     borderRadius: 2,
     transition: 'width 0.3s ease',
+  } satisfies React.CSSProperties,
+
+  // Dashboard
+  dashboard: {
+    marginBottom: 20,
+    padding: 20,
+    background: '#fafbff',
+    border: '1px solid #e2e4f0',
+    borderRadius: 10,
+  } satisfies React.CSSProperties,
+  dashboardHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  } satisfies React.CSSProperties,
+  dashboardTitle: {
+    margin: 0,
+    fontSize: 16,
+    fontWeight: 600,
+    color: '#1a1a2e',
+  } satisfies React.CSSProperties,
+  dashboardSub: {
+    margin: '4px 0 0',
+    fontSize: 12,
+    color: '#888',
+  } satisfies React.CSSProperties,
+  grid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(4, 1fr)',
+    gap: 12,
+  } satisfies React.CSSProperties,
+  card: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    padding: '16px 12px',
+    background: '#fff',
+    border: '1px solid #eee',
+    borderRadius: 8,
+  } satisfies React.CSSProperties,
+  cardValue: {
+    fontSize: 28,
+    fontWeight: 700,
+    color: '#1a1a2e',
+    lineHeight: 1,
+  } satisfies React.CSSProperties,
+  cardLabel: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  } satisfies React.CSSProperties as React.CSSProperties,
+  renderBadge: {
+    fontSize: 10,
+    color: '#6366f1',
+    background: '#eef0ff',
+    padding: '2px 6px',
+    borderRadius: 4,
+    marginTop: 8,
+    fontFamily: 'monospace',
   } satisfies React.CSSProperties,
 
   // Add form

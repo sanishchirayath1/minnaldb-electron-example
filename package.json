@@ -17,9 +17,10 @@
     "dist:linux": "electron-vite build && electron-builder --linux --config electron-builder.yml"
   },
   "dependencies": {
+    "@preact/signals-core": "^1.14.1",
     "minnaldb": "^0.0.2",
     "minnaldb-electron": "^0.0.2",
-    "minnaldb-react": "^0.0.2",
+    "minnaldb-react": "0.0.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
