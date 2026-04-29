@@ -1,0 +1,60 @@
+appId: com.minnaldb.taskmanager
+productName: MinnalDB Tasks
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - out/**/*
+  - node_modules/**/*
+  - "!node_modules/**/{test,tests,__tests__,spec,specs}/**"
+  - "!node_modules/**/*.{md,ts,map}"
+  - "!node_modules/.cache/**"
+
+# Include the native better-sqlite3 binary
+extraResources: []
+
+asar: true
+asarUnpack:
+  # Native .node addons must be unpacked from the asar archive
+  - "node_modules/better-sqlite3/**"
+  - "node_modules/bindings/**"
+  - "node_modules/file-uri-to-path/**"
+
+mac:
+  category: public.app-category.productivity
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+  artifactName: "${productName}-${version}-${arch}.${ext}"
+
+dmg:
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: "${productName}-${version}-Setup.${ext}"
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+  category: Utility
+  artifactName: "${productName}-${version}.${ext}"
